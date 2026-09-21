@@ -1,0 +1,10 @@
+name = "CTrue"
+version = "0.1.0"
+defaultTargets = ["ctrue"]
+
+[[lean_lib]]
+name = "CTrue"
+
+[[lean_exe]]
+name = "ctrue"
+root = "Main"
