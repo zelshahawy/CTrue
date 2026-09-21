@@ -19,4 +19,4 @@ can also host claims about a particular C program: that this sorting routine
 returns a permutation of its input, that this parser never
 reads outside its buffer, that this loop terminates.
 
-For now, the license is BSD-3-Clause license.
+For now, the license is CC0 1.0 Universal License.
