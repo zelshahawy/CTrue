@@ -4,7 +4,7 @@ I have been interested in compilers, and after realizing that UChicago is not of
 compilers course in my senior year, I decided to learn it on my own.
 
 Stages:
-    - [x] Basic CLI 23rd September
+- [x] Basic CLI 23rd September
 
 ## Why did I choose Lean
 
