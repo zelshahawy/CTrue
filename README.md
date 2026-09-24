@@ -3,7 +3,8 @@
 I have been interested in compilers, and after realizing that UChicago is not offering a
 compilers course in my senior year, I decided to learn it on my own.
 
-I am mainly following Nora Sandler's *Writing a C Compiler*.
+Stages:
+    - [x] Basic CLI 23rd September
 
 ## Why did I choose Lean
 
