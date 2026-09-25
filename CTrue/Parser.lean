@@ -99,4 +99,61 @@ def parse (ts : List Token) : Except String Program := do
     throw s!"Expected end of input but found {found rest}"
   return { function }
 
+-- Tests
+private def astOf (source : String) : Option Program :=
+  (lex source >>= parse).toOption
+
+private def parseErr (source : String) : Option String :=
+  match lex source >>= parse with
+  | .error e => some e
+  | .ok _    => none
+
+private def main2 : Program :=
+  { function := { name := "main", body := .ret (.constant 2) } }
+
+#guard astOf "int main(void) { return 2; }" == some main2
+
+#guard astOf "int main(void) {\n    return 2;\n}\n" == some main2
+#guard astOf "int  main ( void )  {  return  2  ;  }" == some main2
+
+#guard astOf "int foo(void) { return 0; }"
+        == some { function := { name := "foo", body := .ret (.constant 0) } }
+#guard astOf "int _f1(void) { return 1000; }"
+        == some { function := { name := "_f1", body := .ret (.constant 1000) } }
+
+private def parseTokens : Option Program :=
+  (parse [.kwInt, .ident "main", .lparen, .kwVoid, .rparen,
+          .lbrace, .kwReturn, .const 2, .semi, .rbrace]).toOption
+#guard parseTokens == some main2
+
+#guard (astOf "int main(void) { return 2; }").map toString
+        == some "Program(\n    Function(\n        name=\"main\",\n        body=Return(\n          Constant(2)\n        )\n    )\n)"
+
+#guard parseErr "main(void) { return 2; }"
+        == some "Expected \"int\" but found \"ident(main)\""
+#guard parseErr "int 3(void) { return 2; }"
+        == some "Expected an identifier but found \"constant(3)\""
+#guard parseErr "int main) { return 2; }"
+        == some "Expected \"(\" but found \")\""
+#guard parseErr "int main() { return 2; }"
+        == some "Expected \"void\" but found \")\""
+#guard parseErr "int main(void) return 2;"
+        == some "Expected \"{\" but found \"return\""
+#guard parseErr "int main(void) { 2; }"
+        == some "Expected \"return\" but found \"constant(2)\""
+#guard parseErr "int main(void) { return foo; }"
+        == some "Expected a constant but found \"ident(foo)\""
+#guard parseErr "int main(void) { return 2 }"
+        == some "Expected \";\" but found \"}\""
+#guard parseErr "int main(void) { return 2;"
+        == some "Expected \"}\" but found end of input"
+
+#guard parseErr "int main(void) {" == some "Expected \"return\" but found end of input"
+#guard parseErr "" == some "Expected \"int\" but found end of input"
+
+#guard parseErr "int main(void) { return 2; } foo"
+        == some "Expected end of input but found \"ident(foo)\""
+#guard parseErr "int main(void) { return 2; } int f(void) { return 3; }"
+        == some "Expected end of input but found \"int\""
+
 end CTrue
