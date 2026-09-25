@@ -74,7 +74,7 @@ def cli (args : List String) : IO UInt32 := do
         IO.eprintln s!"{input}:{msg}"
         return 1
     | .ok tokens =>
-      IO.FS.writeFile "Lexer_result.txt" tokens.toString
+      IO.FS.writeFile "lexer_result.txt" tokens.toString
       if opts.stage == .lex then
         return 0
 
@@ -83,7 +83,7 @@ def cli (args : List String) : IO UInt32 := do
           IO.eprintln s!"{input}: {msg}"
           return 1
       | .ok ast =>
-        IO.FS.writeFile "Parser_result.txt" (toString ast)
+        IO.FS.writeFile "parser_result.txt" (toString ast)
         if opts.stage == .parse then
           return 0
         IO.eprintln s!"ctrue: {input}: parsed, \
