@@ -84,4 +84,42 @@ partial def tokenizeAux (line col : Nat) : (input : List Char) → Except String
 def lex (source : String) : Except String (List Token) :=
   tokenizeAux 1 1 source.toList
 
+-- Tests
+
+private def toks (source : String) : Option (List Token) :=
+  (lex source).toOption
+
+private def errOf : Except String (List Token) -> Option String
+  | .error e => some e
+  | .ok _    => none
+
+#guard toks "int main(void) { return 2; }"
+        == some [.kwInt, .ident "main", .lparen, .kwVoid, .rparen,
+                 .lbrace, .kwReturn, .const 2, .semi, .rbrace]
+
+#guard toks "int void return" == some [.kwInt, .kwVoid, .kwReturn]
+#guard toks "integer voided returns"
+        == some [.ident "integer", .ident "voided", .ident "returns"]
+#guard toks "_foo bar1 int2"
+        == some [.ident "_foo", .ident "bar1", .ident "int2"]
+
+#guard toks "0 7 42 1000" == some [.const 0, .const 7, .const 42, .const 1000]
+
+#guard toks "(){};" == some [.lparen, .rparen, .lbrace, .rbrace, .semi]
+
+#guard toks "" == some []
+#guard toks "   \n\t " == some []
+
+#guard toks "int\nmain" == some [.kwInt, .ident "main"]
+
+#guard errOf (lex "123abc")
+        == some "1:1: invalid token: constant '123' is followed by 'a'"
+#guard errOf (lex "return 1foo;")
+        == some "1:8: invalid token: constant '1' is followed by 'f'"
+
+#guard errOf (lex "int main(void) { return 1@; }")
+        == some "1:26: unexpected character '@'"
+#guard errOf (lex "int main(void) {\n  return @;\n}")
+        == some "2:10: unexpected character '@'"
+
 end CTrue

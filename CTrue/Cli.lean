@@ -1,4 +1,5 @@
 import CTrue.Lexer
+import CTrue.Parser
 
 open CTrue
 
@@ -76,6 +77,15 @@ def cli (args : List String) : IO UInt32 := do
       IO.FS.writeFile "Lexer_result.txt" tokens.toString
       if opts.stage == .lex then
         return 0
-      IO.eprintln s!"ctrue: {input}: lexed {tokens.length} tokens, \
-                    but stage {repr opts.stage} is not implemented yet"
-      return 1
+
+      match parse tokens with
+      | .error msg =>
+          IO.eprintln s!"{input}: {msg}"
+          return 1
+      | .ok ast =>
+        IO.FS.writeFile "Parser_result.txt" (toString ast)
+        if opts.stage == .parse then
+          return 0
+        IO.eprintln s!"ctrue: {input}: parsed, \
+                      but stage {repr opts.stage} is not implemented yet"
+        return 1

@@ -6,6 +6,7 @@ compilers course in my senior year, I decided to learn it on my own.
 Stages:
 - [x] Basic CLI 23rd September
 - [x] Basic Lexer 24rd September
+- [x] Basic Parser / AST generator 25th September
 
 ## Why did I choose Lean
 
