@@ -1,5 +1,6 @@
 import CTrue.Lexer
 import CTrue.Parser
+import CTrue.Codegen
 
 open CTrue
 
@@ -86,6 +87,12 @@ def cli (args : List String) : IO UInt32 := do
         IO.FS.writeFile "parser_result.txt" (toString ast)
         if opts.stage == .parse then
           return 0
-        IO.eprintln s!"ctrue: {input}: parsed, \
+
+        let asm := codegen ast
+        IO.FS.writeFile "codegen_result.txt" (toString asm)
+        if opts.stage == .codegen then
+          return 0
+
+        IO.eprintln s!"ctrue: {input}: generated assembly, \
                       but stage {repr opts.stage} is not implemented yet"
         return 1

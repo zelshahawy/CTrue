@@ -12,37 +12,42 @@ exp                 = Constant(int)
 ```
 -/
 
-inductive Exp where
+inductive Expression where
   | constant (value : Nat)
 deriving Repr, DecidableEq, BEq, Inhabited
 
-inductive Stmt where
-  | ret (value : Exp)
+inductive Statement where
+  | ret (value : Expression)
 deriving Repr, DecidableEq, BEq, Inhabited
 
 structure FunctionDef where
   name : String
-  body : Stmt
+  body : Statement
 deriving Repr, DecidableEq, BEq, Inhabited
 
 structure Program where
   function : FunctionDef
 deriving Repr, DecidableEq, BEq, Inhabited
 
--- Pretty pritning for debugging
-def Exp.pretty (_indent : String) : Exp → String
-  | constant v => s!"Constant({v})"
+-- Pretty printing for debugging
+def Expression.pretty (_indent : String) (expression : Expression) : String :=
+  match expression with
+  | .constant value => s!"Constant({value})"
 
-def Stmt.pretty (indent : String) : Stmt → String
-  | ret value =>
+def Statement.pretty (indent : String) (statement : Statement) : String :=
+  match statement with
+  | .ret value =>
     s!"Return(\n{indent}  {value.pretty (indent ++ "  ")}\n{indent})"
 
-def FunctionDef.pretty (indent : String) (f : FunctionDef) : String :=
-  let inner := indent ++ "    "
-  s!"Function(\n{inner}name=\"{f.name}\",\n{inner}body={f.body.pretty inner}\n{indent})"
+def FunctionDef.pretty (indent : String) (functionDef : FunctionDef) : String :=
+  let innerIndent := indent ++ "    "
+  s!"Function(\n\
+     {innerIndent}name=\"{functionDef.name}\",\n\
+     {innerIndent}body={functionDef.body.pretty innerIndent}\n\
+     {indent})"
 
-def Program.pretty (p : Program) : String :=
-  s!"Program(\n    {p.function.pretty "    "}\n)"
+def Program.pretty (program : Program) : String :=
+  s!"Program(\n    {program.function.pretty "    "}\n)"
 
 instance : ToString Program := ⟨Program.pretty⟩
 
@@ -54,106 +59,110 @@ instance : ToString Program := ⟨Program.pretty⟩
 <statement> ::= "return" <exp> ";"
 <exp>       ::= <int>
 ```
+
+Each parser takes the tokens it has not consumed yet and returns the AST node
+it built together with the tokens still left over.
 -/
 
-def found : List Token → String
-  | []     => "end of input"
-  | t :: _ => s!"\"{t}\""
+def describeNextToken : List Token → String
+  | []          => "end of input"
+  | token :: _  => s!"\"{token}\""
 
-def expect (expected : Token) (ts : List Token) : Except String (List Token) :=
-  match ts with
-  | t :: rest => if t == expected then .ok rest
-                 else .error s!"Expected \"{expected}\" but found {found ts}"
-  | []        => .error s!"Expected \"{expected}\" but found end of input"
+def expect (expected : Token) (tokens : List Token) : Except String (List Token) :=
+  match tokens with
+  | token :: remainingTokens =>
+      if token == expected then .ok remainingTokens
+      else .error s!"Expected \"{expected}\" but found {describeNextToken tokens}"
+  | [] => .error s!"Expected \"{expected}\" but found end of input"
 
-def parseIdentifier (ts : List Token) : Except String (String × List Token) :=
-  match ts with
-  | .ident name :: rest => .ok (name, rest)
-  | _ => .error s!"Expected an identifier but found {found ts}"
+def parseIdentifier (tokens : List Token) : Except String (String × List Token) :=
+  match tokens with
+  | .ident name :: remainingTokens => .ok (name, remainingTokens)
+  | _ => .error s!"Expected an identifier but found {describeNextToken tokens}"
 
-def parseExp (ts : List Token) : Except String (Exp × List Token) :=
-  match ts with
-  | .const value :: rest => .ok (.constant value, rest)
-  | _ => .error s!"Expected a constant but found {found ts}"
+def parseExpression (tokens : List Token) : Except String (Expression × List Token) :=
+  match tokens with
+  | .const value :: remainingTokens => .ok (.constant value, remainingTokens)
+  | _ => .error s!"Expected a constant but found {describeNextToken tokens}"
 
-def parseStatement (ts : List Token) : Except String (Stmt × List Token) := do
-  let ts ← expect .kwReturn ts
-  let (value, ts) ← parseExp ts
-  let ts ← expect .semi ts
-  return (.ret value, ts)
+def parseStatement (tokens : List Token) : Except String (Statement × List Token) := do
+  let tokens ← expect .kwReturn tokens
+  let (value, tokens) ← parseExpression tokens
+  let tokens ← expect .semi tokens
+  return (.ret value, tokens)
 
-def parseFunction (ts : List Token) : Except String (FunctionDef × List Token) := do
-  let ts ← expect .kwInt ts
-  let (name, ts) ← parseIdentifier ts
-  let ts ← expect .lparen ts
-  let ts ← expect .kwVoid ts
-  let ts ← expect .rparen ts
-  let ts ← expect .lbrace ts
-  let (body, ts) ← parseStatement ts
-  let ts ← expect .rbrace ts
-  return ({ name, body }, ts)
+def parseFunction (tokens : List Token) : Except String (FunctionDef × List Token) := do
+  let tokens ← expect .kwInt tokens
+  let (name, tokens) ← parseIdentifier tokens
+  let tokens ← expect .lparen tokens
+  let tokens ← expect .kwVoid tokens
+  let tokens ← expect .rparen tokens
+  let tokens ← expect .lbrace tokens
+  let (body, tokens) ← parseStatement tokens
+  let tokens ← expect .rbrace tokens
+  return ({ name, body }, tokens)
 
-def parse (ts : List Token) : Except String Program := do
-  let (function, rest) ← parseFunction ts
-  if !rest.isEmpty then
-    throw s!"Expected end of input but found {found rest}"
-  return { function }
+def parse (tokens : List Token) : Except String Program := do
+  let (functionDef, remainingTokens) ← parseFunction tokens
+  if !remainingTokens.isEmpty then
+    throw s!"Expected end of input but found {describeNextToken remainingTokens}"
+  return { function := functionDef }
 
 -- Tests
-private def astOf (source : String) : Option Program :=
+private def astOfSource (source : String) : Option Program :=
   (lex source >>= parse).toOption
 
-private def parseErr (source : String) : Option String :=
+private def parseErrorOfSource (source : String) : Option String :=
   match lex source >>= parse with
-  | .error e => some e
-  | .ok _    => none
+  | .error message => some message
+  | .ok _          => none
 
-private def main2 : Program :=
+private def mainReturns2 : Program :=
   { function := { name := "main", body := .ret (.constant 2) } }
 
-#guard astOf "int main(void) { return 2; }" == some main2
+#guard astOfSource "int main(void) { return 2; }" == some mainReturns2
 
-#guard astOf "int main(void) {\n    return 2;\n}\n" == some main2
-#guard astOf "int  main ( void )  {  return  2  ;  }" == some main2
+#guard astOfSource "int main(void) {\n    return 2;\n}\n" == some mainReturns2
+#guard astOfSource "int  main ( void )  {  return  2  ;  }" == some mainReturns2
 
-#guard astOf "int foo(void) { return 0; }"
+#guard astOfSource "int foo(void) { return 0; }"
         == some { function := { name := "foo", body := .ret (.constant 0) } }
-#guard astOf "int _f1(void) { return 1000; }"
+#guard astOfSource "int _f1(void) { return 1000; }"
         == some { function := { name := "_f1", body := .ret (.constant 1000) } }
 
-private def parseTokens : Option Program :=
+private def astFromTokenList : Option Program :=
   (parse [.kwInt, .ident "main", .lparen, .kwVoid, .rparen,
           .lbrace, .kwReturn, .const 2, .semi, .rbrace]).toOption
-#guard parseTokens == some main2
+#guard astFromTokenList == some mainReturns2
 
-#guard (astOf "int main(void) { return 2; }").map toString
+#guard (astOfSource "int main(void) { return 2; }").map toString
         == some "Program(\n    Function(\n        name=\"main\",\n        body=Return(\n          Constant(2)\n        )\n    )\n)"
 
-#guard parseErr "main(void) { return 2; }"
+#guard parseErrorOfSource "main(void) { return 2; }"
         == some "Expected \"int\" but found \"ident(main)\""
-#guard parseErr "int 3(void) { return 2; }"
+#guard parseErrorOfSource "int 3(void) { return 2; }"
         == some "Expected an identifier but found \"constant(3)\""
-#guard parseErr "int main) { return 2; }"
+#guard parseErrorOfSource "int main) { return 2; }"
         == some "Expected \"(\" but found \")\""
-#guard parseErr "int main() { return 2; }"
+#guard parseErrorOfSource "int main() { return 2; }"
         == some "Expected \"void\" but found \")\""
-#guard parseErr "int main(void) return 2;"
+#guard parseErrorOfSource "int main(void) return 2;"
         == some "Expected \"{\" but found \"return\""
-#guard parseErr "int main(void) { 2; }"
+#guard parseErrorOfSource "int main(void) { 2; }"
         == some "Expected \"return\" but found \"constant(2)\""
-#guard parseErr "int main(void) { return foo; }"
+#guard parseErrorOfSource "int main(void) { return foo; }"
         == some "Expected a constant but found \"ident(foo)\""
-#guard parseErr "int main(void) { return 2 }"
+#guard parseErrorOfSource "int main(void) { return 2 }"
         == some "Expected \";\" but found \"}\""
-#guard parseErr "int main(void) { return 2;"
+#guard parseErrorOfSource "int main(void) { return 2;"
         == some "Expected \"}\" but found end of input"
 
-#guard parseErr "int main(void) {" == some "Expected \"return\" but found end of input"
-#guard parseErr "" == some "Expected \"int\" but found end of input"
+#guard parseErrorOfSource "int main(void) {" == some "Expected \"return\" but found end of input"
+#guard parseErrorOfSource "" == some "Expected \"int\" but found end of input"
 
-#guard parseErr "int main(void) { return 2; } foo"
+#guard parseErrorOfSource "int main(void) { return 2; } foo"
         == some "Expected end of input but found \"ident(foo)\""
-#guard parseErr "int main(void) { return 2; } int f(void) { return 3; }"
+#guard parseErrorOfSource "int main(void) { return 2; } int f(void) { return 3; }"
         == some "Expected end of input but found \"int\""
 
 end CTrue
