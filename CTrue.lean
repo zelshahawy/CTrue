@@ -3,4 +3,5 @@
 import CTrue.Lexer
 import CTrue.Parser
 import CTrue.Codegen
+import CTrue.Emit
 import CTrue.Driver

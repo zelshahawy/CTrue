@@ -1,6 +1,7 @@
 import CTrue.Lexer
 import CTrue.Parser
 import CTrue.Codegen
+import CTrue.Emit
 
 open CTrue
 
@@ -46,6 +47,12 @@ def parseArgs (args : List String) : Except String Options := do
   if !seenInput then throw "no input file"
   if opts.input.extension != some "c" then throw s!"input must be a .c file: {opts.input}"
   return opts
+
+def hostArchArgs : Array String :=
+  if System.Platform.isOSX && System.Platform.target.startsWith "arm64" then
+    #["-arch", "x86_64"] -- my best effort to make this work in non x86 machines.
+  else
+    #[]
 
 def runCmd (cmd : String) (args : Array String) : IO (Except String Unit) := do
   let out ← IO.Process.output { cmd, args }
@@ -93,6 +100,17 @@ def cli (args : List String) : IO UInt32 := do
         if opts.stage == .codegen then
           return 0
 
-        IO.eprintln s!"ctrue: {input}: generated assembly, \
-                      but stage {repr opts.stage} is not implemented yet"
-        return 1
+        let assemblyPath := input.withExtension "s"
+        IO.FS.writeFile assemblyPath (emitProgram hostTarget asm)
+        if opts.stage == .assembly then
+          return 0
+
+        let outputPath :=
+          if opts.stage == .object then input.withExtension "o" else input.withExtension ""
+        let compileOnly := if opts.stage == .object then #["-c"] else #[]
+        let result ← runCmd "gcc"
+          (hostArchArgs ++ compileOnly ++ #[assemblyPath.toString, "-o", outputPath.toString])
+        IO.FS.removeFile assemblyPath
+        match result with
+        | .error msg => IO.eprintln s!"ctrue: {msg}"; return 1
+        | .ok () => return 0

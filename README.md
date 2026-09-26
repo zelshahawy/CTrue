@@ -4,9 +4,15 @@ I have been interested in compilers, and after realizing that UChicago is not of
 compilers course in my senior year, I decided to learn it on my own.
 
 Stages:
-- [x] Basic CLI 23rd September
-- [x] Basic Lexer 24rd September
-- [x] Basic Parser / AST generator 25th September
+
+Chapter 1
+- [x] Basic CLI 23rd September.
+- [x] Basic Lexer 24rd September.
+- [x] Basic Parser / AST generator 25th September.
+- [x] Finished assembler and emission 26th September.
+- [x] Finished end-to-end / Chapter 1 26th September.
+
+Chapter 2
 
 ## Why did I choose Lean
 
