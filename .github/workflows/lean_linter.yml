@@ -1,0 +1,29 @@
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uss: leanprover/lean-action@v1
+        with:
+          lint: false          # this job runs lean-fmt itself, below
+      - name: lean-fmt
+        id: fmt
+        run: |
+          set +e
+          lake exe lean-fmt check \
+            --output-format sarif --output-file lean-fmt.sarif
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('lean-fmt.sarif') != ''
+        with:
+          sarif_file: lean-fmt.sarif
+      - name: fail on findings
+        if: steps.fmt.outputs.status != '0'
+        run: |
+          echo "lean-fmt exited ${{ steps.fmt.outputs.status }}"
+          exit 1
+
