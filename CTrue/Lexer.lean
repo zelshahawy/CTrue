@@ -11,21 +11,27 @@ inductive Token where
   | lbrace
   | rbrace
   | semi
+  | telda 
+  | negate 
+  | decrementor
 deriving Repr, DecidableEq, BEq, Inhabited
 
 namespace Token
 
 def toString : Token → String
-  | kwInt     => "int"
-  | kwVoid    => "void"
-  | kwReturn  => "return"
-  | ident n   => s!"ident({n})"
-  | const v   => s!"constant({v})"
-  | lparen    => "("
-  | rparen    => ")"
-  | lbrace    => "{"
-  | rbrace    => "}"
-  | semi      => ";"
+  | kwInt       => "int"
+  | kwVoid      => "void"
+  | kwReturn    => "return"
+  | ident n     => s!"ident({n})"
+  | const v     => s!"constant({v})"
+  | lparen      => "("
+  | rparen      => ")"
+  | lbrace      => "{"
+  | rbrace      => "}"
+  | semi        => ";"
+  | negate      => "-"
+  | telda       => "~"
+  | decrementor => "--"
 
 instance : ToString Token := ⟨toString⟩
 
@@ -41,6 +47,7 @@ def classify (text : String) : Token :=
   | "void"   => .kwVoid
   | "return" => .kwReturn
   | _        => .ident text
+
 
 def digitsToNat (ds : List Char) : Nat :=
   ds.foldl (fun acc d => acc * 10 + (d.toNat - '0'.toNat)) 0
@@ -68,17 +75,23 @@ partial def tokenizeAux (line col : Nat) : (input : List Char) → Except String
           (tokenizeAux line (col + digits.length) rest).map (.const (digitsToNat digits) :: ·)
       | [] => .ok [.const (digitsToNat digits)]
     else
-      let tok? : Option Token :=
-        match c with
-        | '(' => some .lparen
-        | ')' => some .rparen
-        | '{' => some .lbrace
-        | '}' => some .rbrace
-        | ';' => some .semi
-        | _   => none
-      match tok? with
-      | none => .error s!"{line}:{col}: unexpected character '{c}'"
-      | some t => (tokenizeAux line (col + 1) cs).map (t :: ·)
+      match c, cs with
+      | '-', '-' :: rest =>
+        (tokenizeAux line (col + 2) rest).map (Token.decrementor :: ·)
+      | _, _ =>
+        let tok? : Option Token :=
+          match c with
+          | '(' => some .lparen
+          | ')' => some .rparen
+          | '{' => some .lbrace
+          | '}' => some .rbrace
+          | ';' => some .semi
+          | '~' => some .telda
+          | '-' => some .negate
+          | _   => none
+        match tok? with
+        | none => .error s!"{line}:{col}: unexpected character '{c}'"
+        | some t => (tokenizeAux line (col + 1) cs).map (t :: ·)
 
 
 def lex (source : String) : Except String (List Token) :=
@@ -121,5 +134,26 @@ private def errOf : Except String (List Token) -> Option String
         == some "1:26: unexpected character '@'"
 #guard errOf (lex "int main(void) {\n  return @;\n}")
         == some "2:10: unexpected character '@'"
+
+#guard toks "~" == some [.telda]
+#guard toks "-" == some [.negate]
+#guard toks "~-" == some [.telda, .negate]
+
+#guard toks "--" == some [.decrementor]
+#guard toks "---" == some [.decrementor, .negate]
+#guard toks "----" == some [.decrementor, .decrementor]
+#guard toks "- -" == some [.negate, .negate]
+
+#guard toks "return ~-3;" == some [.kwReturn, .telda, .negate, .const 3, .semi]
+#guard toks "return -~0;" == some [.kwReturn, .negate, .telda, .const 0, .semi]
+#guard toks "return ~-2147483647;"
+        == some [.kwReturn, .telda, .negate, .const 2147483647, .semi]
+
+#guard toks "return (-)3;"
+        == some [.kwReturn, .lparen, .negate, .rparen, .const 3, .semi]
+#guard toks "return 4-;" == some [.kwReturn, .const 4, .negate, .semi]
+
+#guard errOf (lex "--@") == some "1:3: unexpected character '@'"
+#guard errOf (lex "-@") == some "1:2: unexpected character '@'"
 
 end CTrue

@@ -13,6 +13,7 @@ Chapter 1
 - [x] Finished end-to-end / Chapter 1 26th September.
 
 Chapter 2
+- [x] Extended lexer for idenitfying '-', '--', and '~'.
 
 ## Why did I choose Lean
 
