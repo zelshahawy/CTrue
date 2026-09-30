@@ -2,18 +2,25 @@ import CTrue.Lexer
 
 namespace CTrue
 
-/-! ### AST (Listing 1-5)
+/-! ### AST (Listing 2-5)
 
 ```
 program             = Program(function_definition)
 function_definition = Function(identifier name, statement body)
 statement           = Return(exp)
-exp                 = Constant(int)
+exp                 = Constant(int) | Unary(unary_operator, exp)
+unary_operator      = Complement | Negate
 ```
 -/
 
+inductive UnaryOperator where
+  | complement
+  | negate
+deriving Repr, DecidableEq, BEq, Inhabited
+
 inductive Expression where
   | constant (value : Nat)
+  | unary (operator : UnaryOperator) (inner : Expression)
 deriving Repr, DecidableEq, BEq, Inhabited
 
 inductive Statement where
@@ -29,10 +36,17 @@ structure Program where
   function : FunctionDef
 deriving Repr, DecidableEq, BEq, Inhabited
 
--- Pretty printing for debugging
-def Expression.pretty (_indent : String) (expression : Expression) : String :=
+def UnaryOperator.pretty : UnaryOperator → String
+  | .complement => "Complement"
+  | .negate     => "Negate"
+
+def Expression.pretty (indent : String) (expression : Expression) : String :=
   match expression with
   | .constant value => s!"Constant({value})"
+  | .unary operator inner =>
+    s!"Unary({operator.pretty},\n\
+       {indent}  {inner.pretty (indent ++ "  ")}\n\
+       {indent})"
 
 def Statement.pretty (indent : String) (statement : Statement) : String :=
   match statement with
@@ -51,13 +65,16 @@ def Program.pretty (program : Program) : String :=
 
 instance : ToString Program := ⟨Program.pretty⟩
 
-/-! ### Recursive descent parser (Listing 1-6)
+/-! ### Recursive descent parser (Listing 2-6)
 
 ```
-<program>   ::= <function>
-<function>  ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
-<statement> ::= "return" <exp> ";"
-<exp>       ::= <int>
+<program>    ::= <function>
+<function>   ::= "int" <identifier> "(" "void" ")" "{" <statement> "}"
+<statement>  ::= "return" <exp> ";"
+<exp>        ::= <int> | <unop> <exp> | "(" <exp> ")"
+<unop>       ::= "-" | "~"
+<identifier> ::= ? An identifier token ?
+<int>        ::= ? A constant token ?
 ```
 
 Each parser takes the tokens it has not consumed yet and returns the AST node
@@ -80,10 +97,19 @@ def parseIdentifier (tokens : List Token) : Except String (String × List Token)
   | .ident name :: remainingTokens => .ok (name, remainingTokens)
   | _ => .error s!"Expected an identifier but found {describeNextToken tokens}"
 
-def parseExpression (tokens : List Token) : Except String (Expression × List Token) :=
-  match tokens with
+def parseExpression : List Token → Except String (Expression × List Token)
   | .const value :: remainingTokens => .ok (.constant value, remainingTokens)
-  | _ => .error s!"Expected a constant but found {describeNextToken tokens}"
+  | .telda :: remainingTokens => do
+      let (inner, remainingTokens) ← parseExpression remainingTokens
+      return (.unary .complement inner, remainingTokens)
+  | .negate :: remainingTokens => do
+      let (inner, remainingTokens) ← parseExpression remainingTokens
+      return (.unary .negate inner, remainingTokens)
+  | .lparen :: remainingTokens => do
+      let (inner, remainingTokens) ← parseExpression remainingTokens
+      let remainingTokens ← expect .rparen remainingTokens
+      return (inner, remainingTokens)
+  | tokens => .error s!"Expected an expression but found {describeNextToken tokens}"
 
 def parseStatement (tokens : List Token) : Except String (Statement × List Token) := do
   let tokens ← expect .kwReturn tokens
@@ -151,7 +177,7 @@ private def astFromTokenList : Option Program :=
 #guard parseErrorOfSource "int main(void) { 2; }"
         == some "Expected \"return\" but found \"constant(2)\""
 #guard parseErrorOfSource "int main(void) { return foo; }"
-        == some "Expected a constant but found \"ident(foo)\""
+        == some "Expected an expression but found \"ident(foo)\""
 #guard parseErrorOfSource "int main(void) { return 2 }"
         == some "Expected \";\" but found \"}\""
 #guard parseErrorOfSource "int main(void) { return 2;"
@@ -164,5 +190,64 @@ private def astFromTokenList : Option Program :=
         == some "Expected end of input but found \"ident(foo)\""
 #guard parseErrorOfSource "int main(void) { return 2; } int f(void) { return 3; }"
         == some "Expected end of input but found \"int\""
+
+-- Chapter 2: unary operators
+
+private def retExp (expression : Expression) : Program :=
+  { function := { name := "main", body := .ret expression } }
+
+#guard astOfSource "int main(void) { return -2; }"
+        == some (retExp (.unary .negate (.constant 2)))
+#guard astOfSource "int main(void) { return ~0; }"
+        == some (retExp (.unary .complement (.constant 0)))
+#guard astOfSource "int main(void) { return ~-3; }"
+        == some (retExp (.unary .complement (.unary .negate (.constant 3))))
+#guard astOfSource "int main(void) { return -~-1; }"
+        == some (retExp (.unary .negate (.unary .complement (.unary .negate (.constant 1)))))
+
+#guard astOfSource "int main(void) { return (2); }" == some mainReturns2
+#guard astOfSource "int main(void) { return (((2))); }" == some mainReturns2
+#guard astOfSource "int main(void) { return -(2); }"
+        == some (retExp (.unary .negate (.constant 2)))
+#guard astOfSource "int main(void) { return (-2); }"
+        == some (retExp (.unary .negate (.constant 2)))
+#guard astOfSource "int main(void) { return -(~(-~-(-4))); }"
+        == some (retExp (.unary .negate (.unary .complement (.unary .negate
+             (.unary .complement (.unary .negate (.unary .negate (.constant 4))))))))
+
+private def prettyOfComplementNegate2 : String :=
+  String.intercalate "\n"
+    [ "Program(",
+      "    Function(",
+      "        name=\"main\",",
+      "        body=Return(",
+      "          Unary(Complement,",
+      "            Unary(Negate,",
+      "              Constant(2)",
+      "            )",
+      "          )",
+      "        )",
+      "    )",
+      ")" ]
+
+#guard (astOfSource "int main(void) { return ~-2; }").map toString
+        == some prettyOfComplementNegate2
+
+#guard parseErrorOfSource "int main(void) { return --2; }"
+        == some "Expected an expression but found \"--\""
+#guard parseErrorOfSource "int main(void) { return -(--2); }"
+        == some "Expected an expression but found \"--\""
+
+#guard parseErrorOfSource "int main(void) { return -; }"
+        == some "Expected an expression but found \";\""
+#guard parseErrorOfSource "int main(void) { return ~; }"
+        == some "Expected an expression but found \";\""
+#guard parseErrorOfSource "int main(void) { return -2" == some "Expected \";\" but found end of input"
+#guard parseErrorOfSource "int main(void) { return (2; }"
+        == some "Expected \")\" but found \";\""
+#guard parseErrorOfSource "int main(void) { return (); }"
+        == some "Expected an expression but found \")\""
+#guard parseErrorOfSource "int main(void) { return 2); }"
+        == some "Expected \";\" but found \")\""
 
 end CTrue
