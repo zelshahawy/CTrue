@@ -13,8 +13,8 @@ Chapter 1
 - [x] Finished end-to-end / Chapter 1 26th September.
 
 Chapter 2
-- [x] Extended lexer for idenitfying '-', '--', and '~'.
-- [x] Finished parsing for unary operators.  
+- [x] Extended lexer for identifying '-', '--', and '~' September 28th.
+- [x] Finished parsing for unary operators September 30th.  
 
 ## Why did I choose Lean
 
