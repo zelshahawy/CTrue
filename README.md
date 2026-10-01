@@ -14,6 +14,7 @@ Chapter 1
 
 Chapter 2
 - [x] Extended lexer for idenitfying '-', '--', and '~'.
+- [x] Finished parsing for unary operators.  
 
 ## Why did I choose Lean
 
