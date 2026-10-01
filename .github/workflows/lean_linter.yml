@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uss: leanprover/lean-action@v1
+      - uses: leanprover/lean-action@v1
         with:
           lint: false          # this job runs lean-fmt itself, below
       - name: lean-fmt
