@@ -13,8 +13,10 @@ Chapter 1
 - [x] Finished end-to-end / Chapter 1 26th September.
 
 Chapter 2
-- [x] Extended lexer for identifying '-', '--', and '~' September 28th.
-- [x] Finished parsing for unary operators September 30th.  
+- [x] Extended lexer for idenitfying '-', '--', and '~'.
+- [x] Extended AST and parser for unary operators (Complement, Negate) and parentheses.
+- [x] TACKY IR and AST lowering with unique temporary variables.
+- [x] `--tacky` stops after IR generation without producing output files.
 
 ## Why did I choose Lean
 

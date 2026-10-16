@@ -1,5 +1,6 @@
 import CTrue.Lexer
 import CTrue.Parser
+import CTrue.Tacky
 import CTrue.Codegen
 import CTrue.Emit
 
@@ -61,6 +62,9 @@ def runCmd (cmd : String) (args : Array String) : IO (Except String Unit) := do
   else
     return .error s!"{cmd} failed with exit code {out.exitCode}\n{out.stderr}"
 
+private def runTacky (ast : Program) : IO Tacky.Program :=
+  pure (generateTacky ast)
+
 def cli (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .error msg =>
@@ -82,7 +86,8 @@ def cli (args : List String) : IO UInt32 := do
         IO.eprintln s!"{input}:{msg}"
         return 1
     | .ok tokens =>
-      IO.FS.writeFile "lexer_result.txt" tokens.toString
+      if !opts.stage.isDryRun then
+        IO.FS.writeFile "lexer_result.txt" tokens.toString
       if opts.stage == .lex then
         return 0
 
@@ -91,12 +96,22 @@ def cli (args : List String) : IO UInt32 := do
           IO.eprintln s!"{input}: {msg}"
           return 1
       | .ok ast =>
-        IO.FS.writeFile "parser_result.txt" (toString ast)
+        if !opts.stage.isDryRun then
+          IO.FS.writeFile "parser_result.txt" (toString ast)
         if opts.stage == .parse then
           return 0
 
-        let asm := codegen ast
-        IO.FS.writeFile "codegen_result.txt" (toString asm)
+        let tacky ← runTacky ast
+        if opts.stage == .tacky then
+          return 0
+
+        match codegen tacky with
+        | .error msg =>
+            IO.eprintln s!"{input}: {msg}"
+            return 1
+        | .ok asm =>
+        if !opts.stage.isDryRun then
+          IO.FS.writeFile "codegen_result.txt" (toString asm)
         if opts.stage == .codegen then
           return 0
 

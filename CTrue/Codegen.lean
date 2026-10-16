@@ -1,4 +1,4 @@
-import CTrue.Parser
+import CTrue.Tacky
 
 namespace CTrue
 
@@ -68,41 +68,59 @@ instance : ToString Program := ⟨Program.pretty⟩
 
 end Asm
 
-/-! ### Assembly generation (Table 1-2)
+/-! ### Assembly generation
 
-| AST node                       | Assembly construct             |
+| TACKY node                     | Assembly construct             |
 | ------------------------------ | ------------------------------ |
 | `Program(function_definition)` | `Program(function_definition)` |
 | `Function(name, body)`         | `Function(name, instructions)` |
-| `Return(exp)`                  | `Mov(exp, Register)`, `Ret`    |
+| `Return(val)`                  | `Mov(val, Register)`, `Ret`    |
 | `Constant(int)`                | `Imm(int)`                     |
+
+
+TACKY generation supports unary operators. Lowering their temporary variables
+to assembly will need the remaining Chapter 2 backend passes; for now, assembly
+generation reports an error for them.
 -/
 
-def genExpression (expression : Expression) : Asm.Operand :=
-  match expression with
-  | .constant value => .imm value
+def genValue (value : Tacky.Val) : Except String Asm.Operand :=
+  match value with
+  | .constant value => .ok (.imm value)
+  | .var name => .error s!"assembly generation for Var(\"{name}\") is not implemented yet"
 
-def genStatement (statement : Statement) : List Asm.Instruction :=
-  match statement with
-  | .ret value => [Asm.Instruction.mov (genExpression value) .reg, Asm.Instruction.ret]
+def genInstruction (instruction : Tacky.Instruction) : Except String (List Asm.Instruction) := do
+  match instruction with
+  | .ret value =>
+    let operand ← genValue value
+    return [Asm.Instruction.mov operand .reg, Asm.Instruction.ret]
+  | .unary operator _ _ =>
+    .error s!"assembly generation for Unary({operator.pretty}, ...) is not implemented yet"
 
-def genFunction (functionDef : FunctionDef) : Asm.FunctionDef :=
-  { name := functionDef.name, instructions := genStatement functionDef.body }
+def genFunction (functionDef : Tacky.FunctionDef) : Except String Asm.FunctionDef := do
+  let instructions ← functionDef.body.mapM genInstruction
+  return { name := functionDef.name, instructions := instructions.flatten }
 
-def codegen (ast : Program) : Asm.Program :=
-  { function := genFunction ast.function }
+def codegen (tacky : Tacky.Program) : Except String Asm.Program := do
+  let function ← genFunction tacky.function
+  return { function }
 
 -- Tests
 private def assemblyOfSource (source : String) : Option Asm.Program :=
-  (lex source >>= parse).toOption.map codegen
+  (lex source >>= parse >>= fun ast => codegen (generateTacky ast)).toOption
+
+private def codegenErrorOfSource (source : String) : Option String :=
+  match lex source >>= parse >>= fun ast => codegen (generateTacky ast) with
+  | .error message => some message
+  | .ok _          => none
 
 private def mainReturns2 : Asm.Program :=
   { function := { name := "main", instructions := [.mov (.imm 2) .reg, .ret] } }
 
-#guard genExpression (.constant 7) == Asm.Operand.imm 7
-#guard genStatement (.ret (.constant 0)) == [Asm.Instruction.mov (.imm 0) .reg, .ret]
-#guard genFunction { name := "f", body := .ret (.constant 1) }
-        == { name := "f", instructions := [.mov (.imm 1) .reg, .ret] }
+#guard (genValue (.constant 7)).toOption == some (Asm.Operand.imm 7)
+#guard (genInstruction (.ret (.constant 0))).toOption
+        == some [Asm.Instruction.mov (.imm 0) .reg, .ret]
+#guard (genFunction { name := "f", body := [.ret (.constant 1)] }).toOption
+        == some { name := "f", instructions := [.mov (.imm 1) .reg, .ret] }
 
 #guard assemblyOfSource "int main(void) { return 2; }" == some mainReturns2
 #guard assemblyOfSource "int main(void) {\n    return 2;\n}\n" == some mainReturns2
@@ -114,5 +132,10 @@ private def mainReturns2 : Asm.Program :=
 
 #guard (assemblyOfSource "int main(void) { return 2; }").map toString
         == some "Program(\n    Function(\n        name=\"main\",\n        instructions=[\n            Mov(Imm(2), Register),\n            Ret\n        ]\n    )\n)"
+
+#guard codegenErrorOfSource "int main(void) { return -2; }"
+        == some "assembly generation for Unary(Negate, ...) is not implemented yet"
+#guard codegenErrorOfSource "int main(void) { return ~2; }"
+        == some "assembly generation for Unary(Complement, ...) is not implemented yet"
 
 end CTrue

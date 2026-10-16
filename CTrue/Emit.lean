@@ -41,7 +41,7 @@ def emitProgram (target : Target) (program : Asm.Program) : String :=
 
 -- Tests
 private def assemblyFor (target : Target) (source : String) : Option String :=
-  ((lex source >>= parse).toOption.map codegen).map (emitProgram target)
+  (lex source >>= parse >>= fun ast => codegen (generateTacky ast)).toOption.map (emitProgram target)
 
 #guard emitOperand (.imm 0) == "$0"
 #guard emitOperand (.imm 42) == "$42"

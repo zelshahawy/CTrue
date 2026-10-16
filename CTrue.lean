@@ -2,6 +2,7 @@
 -- Import modules here that should be built as part of the library.
 import CTrue.Lexer
 import CTrue.Parser
+import CTrue.Tacky
 import CTrue.Codegen
 import CTrue.Emit
 import CTrue.Driver
